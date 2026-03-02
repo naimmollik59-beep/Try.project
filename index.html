@@ -81,11 +81,15 @@
         .salah-check { appearance: none; width: 20px; height: 20px; border: 1px solid #333; background: #000; cursor: pointer; position: relative; }
         .salah-check:checked { background: var(--blood); border-color: var(--blood); }
         .salah-check:checked::after { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; color: #000; font-size: 10px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+
+        /* Sync Button for App Environments */
+        #sync-btn { position: absolute; top: 15px; right: 100px; font-size: 10px; color: var(--blood); border: 1px solid var(--blood); padding: 2px 6px; z-index: 50; }
     </style>
 </head>
 <body onload="bootShadow()">
 
     <header class="combat-header">
+        <button id="sync-btn" onclick="forceSyncAudio()">SYNC SYSTEM</button>
         <div class="flex justify-between items-start relative z-20">
             <div>
                 <h1 class="header-title">Shadow_Alpha</h1>
@@ -232,29 +236,43 @@
         let timer = { seconds: 0, active: false, interval: null };
         let head;
         const HYD_LIMIT = 4000, AUTH_KEY = "1420";
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let audioCtx;
+        
         const getXPLimit = (lvl) => lvl * 500;
         const getSPLimit = (lvl) => lvl * 50;
 
-        // Added Activation Logic for App Environments
-        let ttsUnlocked = false;
-        function unlockTTS() {
-            if (ttsUnlocked) return;
-            const silence = new SpeechSynthesisUtterance("");
-            window.speechSynthesis.speak(silence);
-            ttsUnlocked = true;
-            document.removeEventListener('click', unlockTTS);
-            document.removeEventListener('touchstart', unlockTTS);
+        // CRITICAL: Force Sync Audio for App Wrappers
+        function forceSyncAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            // Prime TTS engine with a silent utterance
+            const utter = new SpeechSynthesisUtterance("System Synchronized");
+            utter.volume = 0; 
+            window.speechSynthesis.speak(utter);
+            
+            beep();
+            document.getElementById('sync-btn').style.display = 'none';
+            pushLog("NEURAL AUDIO SYNCED");
         }
-        document.addEventListener('click', unlockTTS);
-        document.addEventListener('touchstart', unlockTTS);
 
         function speak(text) { 
             if (!window.speechSynthesis) return; 
+            
+            // Clear queue to prevent build-up in app-buffers
             window.speechSynthesis.cancel(); 
+            
             let phoneticText = text.replace(/ML/gi, 'milliliters').replace(/_/g, ' ');
             const utter = new SpeechSynthesisUtterance(phoneticText); 
-            utter.pitch = 0.6; utter.rate = 1.1; 
+            
+            // Set explicit voice parameters for app clarity
+            utter.pitch = 0.6; 
+            utter.rate = 1.0; 
+            utter.volume = 1.0;
+
+            // Log status if speech fails
+            utter.onerror = () => { console.log("TTS Error in App Layer"); beep(); };
+            
             window.speechSynthesis.speak(utter); 
         }
 
@@ -447,6 +465,7 @@
 
         function beep() { 
             try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioCtx.state === 'suspended') audioCtx.resume();
                 const o = audioCtx.createOscillator(), g = audioCtx.createGain(); 
                 o.connect(g); g.connect(audioCtx.destination); 
@@ -591,7 +610,6 @@
                 if(new Date().getSeconds() === 0) { checkDailyReset(); }
                 updateSkinCounters(); checkSkinExpiry();
             }, 1000); 
-            // Silent logs during boot to avoid activation errors
             pushLog("SYSTEM ONLINE. NEURAL LINK ESTABLISHED.", true);
         }
         
